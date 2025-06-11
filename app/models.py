@@ -1,13 +1,14 @@
 from app import db
 
-class Task(db.Model):  # 继承 db.Model 表示这是一个数据库模型
-    id = db.Column(db.Integer, primary_key=True)      # 主键ID
-    title = db.Column(db.String(100), nullable=False)  # 任务标题（非空）
-    done = db.Column(db.Boolean, default=False)        # 完成状态（默认为False）
 
-    def to_dict(self):
-        return {
-            "id": self.id,
-            "title": self.title,
-            "done": self.done
-        }
+class Task(db.Model):
+    __tablename__ = 'tasks'  # 指定表名
+
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(100), nullable=False)
+    description = db.Column(db.Text)
+    is_completed = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=db.func.now())
+
+    def __repr__(self):
+        return f'<Task {self.title}>'

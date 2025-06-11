@@ -9,7 +9,8 @@ def create_app():
     app = Flask(__name__)
     app.config.from_object('config.Config')
 
-    db.init_app(app)  # 绑定数据库到Flask
+    # MySQL配置（从config.py加载）
+    db.init_app(app)
 
     with app.app_context():
         db.create_all()  # 创建数据表（如果不存在）
