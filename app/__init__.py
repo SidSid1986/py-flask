@@ -1,3 +1,4 @@
+# app/__init__.py
 
 from dotenv import load_dotenv
 
@@ -14,13 +15,21 @@ from sqlalchemy.exc import SQLAlchemyError
 # 初始化数据库
 db = SQLAlchemy()
 
+# --------------------------
+# 新增：初始化 、
+# --------------------------
+from flask_jwt_extended import JWTManager
+
+jwt = JWTManager()  # 创建 JWTManager 实例
 
 def create_app():
     app = Flask(__name__)
-    app.url_map.strict_slashes = False  # 禁用斜杠敏感'
+    app.url_map.strict_slashes = False  # 禁用斜杠敏感
 
     # 加载配置
     app.config.from_object('config.Config')
+    # 设置密钥
+    app.config['SECRET_KEY'] = '26a2e35194f4f6b6628bdff2177dd08b1bd0b84f0c445176'  # 替换为你的密钥
 
     # 读取环境变量（一次读取，多次使用）
     flask_env = os.getenv('FLASK_ENV')
@@ -68,6 +77,8 @@ def create_app():
     # 初始化数据库
     db.init_app(app)
 
+    # 显式导入模型（确保模型被注册到 db）
+    from app import models
     # 数据库连接测试
     with app.app_context():
         try:
@@ -80,6 +91,11 @@ def create_app():
             app.logger.error("2. 检查防火墙设置")
             app.logger.error("3. 验证用户名密码是否正确")
             sys.exit(1)
+
+    # --------------------------
+    # 新增：初始化 JWTManager
+    # --------------------------
+    jwt.init_app(app)  # 将 JWTManager 初始化到 app
 
     # 注册蓝图
     from app import routes

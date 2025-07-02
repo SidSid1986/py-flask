@@ -1,102 +1,96 @@
 from flask import Blueprint, request, jsonify, current_app
 from sqlalchemy.exc import SQLAlchemyError
-from app import db  # 使用已配置的db实例
+from flask_jwt_extended import (
+    create_access_token,
+    jwt_required,
+    get_jwt_identity
+)
+from app import db
+from app.models import User, Task  # 从models.py导入模型
 
-# 初始化蓝图
 bp = Blueprint('task_api', __name__, url_prefix='/api')
 
-# 请求钩子：记录所有进入蓝图的请求路径
-@bp.before_request
 @bp.before_request
 def log_request_path():
     current_app.logger.debug(f"请求路径: {request.method} {request.path}")
-    current_app.logger.debug(f"完整URL: {request.url}")
-    current_app.logger.debug(f"来源: {request.referrer}")
 
-# 数据模型
-class Task(db.Model):
-    __tablename__ = 'task'
-    __table_args__ = {'schema': 'lhk_test'}
+@bp.route('/login', methods=["POST"])
+def login():
+    # 打印原始请求数据（调试用）
+    print("原始请求数据:", request.get_data(as_text=True))  # 查看原始JSON字符串
+    print("解析后的JSON:", request.json)  # 查看解析后的字典
 
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(80), nullable=False)
-    title = db.Column(db.String(120))
+    username = request.json.get("username")
+    password = request.json.get("password")
+    print(f"登录尝试 - 用户名: {username}, 密码: {password}")  # 确认值是否正确
 
-    def to_dict(self):
-        return {
-            'id': self.id,
-            'name': self.name,
-            'title': self.title or None
-        }
+    if not username or not password:
+        return jsonify({"msg": "用户名和密码不能为空"}), 400
 
-# 健康检查接口
+    user = User.query.filter_by(username=username).first()
+    if not user:
+        print("数据库查询结果: 用户不存在")  # 调试日志
+        return jsonify({"msg": "用户名或密码错误"}), 401
+
+    if not user.check_password(password):
+        print("密码验证失败")  # 调试日志
+        return jsonify({"msg": "用户名或密码错误"}), 401
+
+    access_token = create_access_token(identity=username)
+    return jsonify(access_token=access_token)
+
 @bp.route('/hello')
 def hello():
-    return jsonify({"message": "API服务运行正常", "database": "lhk_test.task"})
+    return jsonify({"message": "API服务运行正常"})
 
-# 任务管理接口
-# 修正任务路由处理函数中的日志记录
 @bp.route('/tasks', methods=['GET'])
+@jwt_required()  # 强制验证Token
 def get_tasks():
-
-    current_app.logger.debug(f"request.path: {request.path}")
-    current_app.logger.debug(f"request.url: {request.url}")
-    try:
-        tasks = Task.query.order_by(Task.id).all()
-        current_app.logger.debug(f"查询到 {len(tasks)} 个任务")
-        return jsonify([task.to_dict() for task in tasks])
-    except SQLAlchemyError as e:
-        current_app.logger.error(f"数据库查询错误: {str(e)}")
-        return jsonify({"error": "获取任务列表失败", "details": str(e)}), 500
-
-
+    tasks = Task.query.order_by(Task.id).all()
+    return jsonify([task.to_dict() for task in tasks])
 
 @bp.route('/tasks', methods=['POST'])
+@jwt_required()
 def create_task():
+    current_user = get_jwt_identity()
     data = request.get_json()
     if not data or 'name' not in data:
         return jsonify({"error": "必须提供name字段"}), 400
 
-    try:
-        task = Task(
-            name=data['name'],
-            title=data.get('title')
-        )
-        db.session.add(task)
-        db.session.commit()
-        return jsonify(task.to_dict()), 201
-    except SQLAlchemyError as e:
-        db.session.rollback()
-        return jsonify({"error": str(e)}), 500
+    task = Task(
+        name=data['name'],
+        title=data.get('title'),
+        gender=data.get('gender'),
+        age=data.get('age'),
+        salary=data.get('salary')
+    )
+    db.session.add(task)
+    db.session.commit()
+    return jsonify(task.to_dict()), 201
 
 @bp.route('/tasks/<int:id>', methods=['GET'])
+@jwt_required()  # 强制验证Token
 def get_task(id):
     task = Task.query.get_or_404(id)
     return jsonify(task.to_dict())
 
 @bp.route('/tasks/<int:id>', methods=['PUT'])
+@jwt_required()
 def update_task(id):
     task = Task.query.get_or_404(id)
     data = request.get_json()
-
-    try:
-        if 'name' in data:
-            task.name = data['name']
-        if 'title' in data:
-            task.title = data['title']
-        db.session.commit()
-        return jsonify(task.to_dict())
-    except SQLAlchemyError as e:
-        db.session.rollback()
-        return jsonify({"error": str(e)}), 500
+    if 'name' in data: task.name = data['name']
+    if 'title' in data: task.title = data['title']
+    if 'gender' in data: task.gender = data['gender']
+    if 'age' in data: task.age = data['age']
+    if 'salary' in data: task.salary = data['salary']
+    db.session.commit()
+    return jsonify(task.to_dict())
 
 @bp.route('/tasks/<int:id>', methods=['DELETE'])
+@jwt_required()
 def delete_task(id):
     task = Task.query.get_or_404(id)
-    try:
-        db.session.delete(task)
-        db.session.commit()
-        return '', 204
-    except SQLAlchemyError as e:
-        db.session.rollback()
-        return jsonify({"error": str(e)}), 500
+    db.session.delete(task)
+    db.session.commit()
+    return '', 204
