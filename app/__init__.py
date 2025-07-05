@@ -16,7 +16,7 @@ from sqlalchemy.exc import SQLAlchemyError
 db = SQLAlchemy()
 
 # --------------------------
-# 新增：初始化 、
+# 初始化 JWTManager
 # --------------------------
 from flask_jwt_extended import JWTManager
 
@@ -93,9 +93,33 @@ def create_app():
             sys.exit(1)
 
     # --------------------------
-    # 新增：初始化 JWTManager
+    # 初始化 JWTManager
     # --------------------------
     jwt.init_app(app)  # 将 JWTManager 初始化到 app
+
+    # --------------------------
+    # 新增：全局 JWT 错误处理
+    # --------------------------
+    @jwt.expired_token_loader
+    def expired_token_callback(jwt_header, jwt_payload):
+        return jsonify({
+            "code": 401,
+            "msg": "Token 已过期，请重新登录"
+        }), 401
+
+    @jwt.invalid_token_loader
+    def invalid_token_callback(error):
+        return jsonify({
+            "code": 401,
+            "msg": "无效的 Token，请检查 Token 是否正确"
+        }), 401
+
+    @jwt.unauthorized_loader
+    def missing_token_callback(error):
+        return jsonify({
+            "code": 401,
+            "msg": "未授权，请先登录"
+        }), 401
 
     # 注册蓝图
     from app import routes
@@ -124,11 +148,11 @@ def create_app():
     def handle_exception(e):
         if isinstance(e, SQLAlchemyError):
             db.session.rollback()
-            return jsonify({"error": "数据库操作失败", "details": str(e)}), 500
+            return jsonify({"code": 500, "msg": "数据库操作失败", "details": str(e)}), 500
         elif isinstance(e, ValueError):
-            return jsonify({"error": "参数格式错误", "details": str(e)}), 400
+            return jsonify({"code": 400, "msg": "参数格式错误", "details": str(e)}), 400
         else:
             app.logger.error(f"未处理异常: {str(e)}", exc_info=True)
-            return jsonify({"error": "服务器内部错误", "details": "请联系管理员"}), 500
+            return jsonify({"code": 500, "msg": "服务器内部错误"}), 500
 
     return app
